@@ -513,7 +513,12 @@ app.get('/sitemap.xml', async (req, res) => {
     const uniq = [...new Map(urls.map(u => [u.loc, u])).values()];
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${uniq.map(u => `  <url><loc>${u.loc}</loc><lastmod>${today}</lastmod><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`).join('\n')}
+${uniq.map(u => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join('\n')}
 </urlset>`;
     res.type('application/xml').send(xml);
   } catch (e) {
@@ -522,7 +527,10 @@ ${uniq.map(u => `  <url><loc>${u.loc}</loc><lastmod>${today}</lastmod><changefre
 });
 
 app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+  res.type('text/plain').send(`User-agent: *
+Allow: /
+Sitemap: ${SITE_URL}/sitemap.xml
+`);
 });
 
 app.listen(PORT, () => {
