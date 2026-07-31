@@ -24,7 +24,12 @@ const PORT = process.env.PORT || 3000;
 
 const SITE_URL = process.env.SITE_URL || 'https://cinebox-br.up.railway.app';
 
+// ==========================================
+// KONFIGURASI FILE STATIS (PENTING AGAR CSS TERBACA)
+// ==========================================
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const ROWS = {
   movie: [
@@ -176,8 +181,8 @@ app.get('/movie/:id/:slug?', async (req, res) => {
 
       <div class="premium-watch-box">
         <a href="/watch/${id}/${englishSlug}"
-           class="btn-watch-glow">
-           <span>▶</span> Assistir Filme Completo HD
+            class="btn-watch-glow">
+            <span>▶</span> Assistir Filme Completo HD
         </a>
         <div class="watch-badge-group">
           <span class="watch-badge">⚡ Dublado / Legendado</span>
