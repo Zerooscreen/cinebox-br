@@ -47,3 +47,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+document.addEventListener('click', async (e) => {
+  const seasonHead = e.target.closest('.season-head');
+  if (!seasonHead) return;
+
+  const seasonItem = seasonHead.closest('.season-item');
+  const panel = seasonItem.querySelector('.episode-panel');
+  const tvId = seasonItem.getAttribute('data-tv');
+  const seasonNumber = seasonItem.getAttribute('data-season');
+
+  seasonItem.classList.toggle('active');
+
+  if (panel.innerHTML.trim() !== '') return;
+
+  panel.innerHTML = '<div class="loading-ep">Carregando episódios...</div>';
+
+  try {
+    const res = await fetch(`/api/season/${tvId}/${seasonNumber}`);
+    const data = await res.json();
+
+    if (data.episodes && data.episodes.length > 0) {
+      panel.innerHTML = data.episodes.map(ep => `
+        <div class="episode-card" style="display:flex;gap:15px;margin-bottom:15px;background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;align-items:center;">
+          <img src="${ep.still || ''}" alt="${escapeHtml(ep.name)}" style="width:120px;height:70px;object-fit:cover;border-radius:6px;" loading="lazy">
+          <div class="ep-info" style="text-align:left;">
+            <div class="ep-num" style="font-size:12px;color:#ff2d55;font-weight:bold;">Episódio ${ep.number}</div>
+            <div class="ep-title" style="font-size:14px;font-weight:bold;color:#fff;">${escapeHtml(ep.name)}</div>
+            <div class="ep-overview" style="font-size:12px;color:#aaa;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(ep.overview || 'Sem descrição.')}</div>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      panel.innerHTML = '<div class="empty" style="padding:10px;color:#aaa;">Nenhum episódio encontrado.</div>';
+    }
+  } catch (err) {
+    panel.innerHTML = '<div class="empty" style="padding:10px;color:#aaa;">Erro ao carregar episódios.</div>';
+  }
+});
+
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
