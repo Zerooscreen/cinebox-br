@@ -238,7 +238,7 @@ app.get('/movie/:id/:slug?', async (req, res) => {
   }
 });
 
-// ---------- WATCH / REDIRECT PAGE ----------
+// ---------- WATCH / REDIRECT PAGE (MOVIES) ----------
 app.get('/watch/:id/:slug?', async (req, res) => {
   const { id } = req.params;
 
@@ -297,6 +297,68 @@ app.get('/watch/:id/:slug?', async (req, res) => {
     }));
   } catch (e) {
     res.redirect(`/movie/${id}`);
+  }
+});
+
+// ---------- WATCH / REDIRECT PAGE (TV EPISODES) ----------
+app.get('/watch/:id/:season/:episode', async (req, res) => {
+  const { id, season, episode } = req.params;
+
+  try {
+    const data = await tmdb(`/tv/${id}`);
+    const englishSlug = slugify(data.name);
+    const targetUrl = `https://zeromovies4k.net/pt/tv/${id}/${season}/${episode}/${englishSlug}end`;
+
+    res.send(layout({
+      headHtml: head({
+        title: `Assistindo ${data.name} - Temporada ${season} Ep ${episode}`,
+        description: data.overview || DEFAULT_DESC,
+        url: `${SITE_URL}/watch/${id}/${season}/${episode}`,
+        robots: 'noindex, nofollow',
+      }),
+
+      bodyHtml: `
+        <div class="watch-page" style="max-width:850px;margin:60px auto;text-align:center;padding:40px 20px;background:#17171b;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)">
+          <h2 style="font-size:28px;margin-bottom:15px;color:#fff">🎬 ${escapeHtml(data.name)} - T${season} E${episode}</h2>
+
+          <div style="position:relative;width:100%;height:320px;background:#000 url('${img(data.backdrop_path, 'w780')}') center/cover;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin:25px 0">
+             <div style="position:absolute;inset:0;background:rgba(0,0,0,0.75)"></div>
+             <div style="position:relative;z-index:2">
+                <p style="font-size:18px;color:#ddd;margin-bottom:10px">Preparando reprodutor HD...</p>
+                <div id="countdown" style="font-size:64px;font-weight:900;color:#ff2d55;text-shadow:0 0 20px rgba(255,45,85,0.6)">5</div>
+                <p style="font-size:14px;color:#aaa">Você será redirecionado para a página de transmissão automaticamente.</p>
+             </div>
+          </div>
+
+          <a href="${targetUrl}"
+             class="btn-watch-glow"
+             id="goNow"
+             style="display:none;margin-top:20px">
+             ▶ Assistir Agora (Clique Aqui)
+          </a>
+
+          <script>
+            let sec = 5;
+            const el = document.getElementById('countdown');
+            const goBtn = document.getElementById('goNow');
+
+            const timer = setInterval(() => {
+              sec--;
+              if(el) el.textContent = sec;
+
+              if(sec <= 0){
+                clearInterval(timer);
+                if(goBtn) goBtn.style.display = 'inline-flex';
+                window.location.href = "${targetUrl}";
+              }
+            }, 1000);
+          </script>
+        </div>
+      `,
+      activeTab: 'tv'
+    }));
+  } catch (e) {
+    res.redirect(`/tv/${id}`);
   }
 });
 
