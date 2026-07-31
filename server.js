@@ -1,42 +1,52 @@
 const express = require('express');
 const path = require('path');
 const { tmdb, img, slugify } = require('./lib/tmdb');
-const { head, layout, posterCard, genreRow, trailerBlock, castGrid, escapeHtml, movieJsonLd, tvJsonLd, sideBannerAd, nativeBannerAd, DEFAULT_TITLE, DEFAULT_DESC, SITE_NAME } = require('./lib/render');
-//
+const { 
+  head, 
+  layout, 
+  posterCard, 
+  genreRow, 
+  trailerBlock, 
+  castGrid, 
+  escapeHtml, 
+  movieJsonLd, 
+  tvJsonLd, 
+  personJsonLd,
+  sideBannerAd, 
+  nativeBannerAd, 
+  DEFAULT_TITLE, 
+  DEFAULT_DESC, 
+  SITE_NAME 
+} = require('./lib/render');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// TODO: substitua pelo domínio final após o deploy no Railway
 const SITE_URL = process.env.SITE_URL || 'https://cinebox-br.up.railway.app';
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 const ROWS = {
   movie: [
-    { key: '01', title: 'Filmes em alta', path: '/trending/movie/week' },
-    { key: '02', title: 'Filmes populares', path: '/movie/popular' },
-    { key: '03', title: 'Filmes mais bem avaliados', path: '/movie/top_rated' },
-    { key: '04', title: 'Em breve nos cinemas', path: '/movie/upcoming' },
+    { key: '01', title: 'Filmes em Alta', path: '/trending/movie/week' },
+    { key: '02', title: 'Filmes Populares', path: '/movie/popular' },
+    { key: '03', title: 'Mais Bem Avaliados', path: '/movie/top_rated' },
+    { key: '04', title: 'Próximos Lançamentos', path: '/movie/upcoming' },
   ],
   tv: [
-    { key: '01', title: 'Séries em alta', path: '/trending/tv/week' },
-    { key: '02', title: 'Séries populares', path: '/tv/popular' },
-    { key: '03', title: 'Séries mais bem avaliadas', path: '/tv/top_rated' },
-    { key: '04', title: 'Séries em exibição', path: '/tv/on_the_air' },
+    { key: '01', title: 'Séries em Alta', path: '/trending/tv/week' },
+    { key: '02', title: 'Séries Populares', path: '/tv/popular' },
+    { key: '03', title: 'Séries Mais Bem Avaliadas', path: '/tv/top_rated' },
+    { key: '04', title: 'Séries no Ar', path: '/tv/on_the_air' },
   ],
 };
 
-// ---------- Título & descrição de SEO (mesmo padrão para TODAS as páginas de detalhe) ----------
 function seoTitle(kind, title, year) {
-  const label = kind === 'movie' ? 'Filme' : 'Série';
-  const y = year || 'ano desconhecido';
-  return `[${label}] ${title} (${y}) Sinopse, Avaliação, Elenco e Trailer Completo`;
+  return `[ASSISTIR!!] ${title} (${year || '2026'}) Filme Completo Online Dublado e Legendado em Português HD/4K`;
 }
 
 function seoDescription(title, year, genreNames) {
-  const yearPart = year ? `ano ${year}, ` : '';
-  const genrePart = genreNames ? `gênero ${genreNames}, ` : '';
-  return `Sinopse, elenco, avaliação e trailer oficial de ${title} no CineBox. ${genrePart}${yearPart}todas as informações em um só lugar.`;
+  return `Clique para assistir ${title} (${year || '2026'}) online agora! Veja o filme completo com áudio dublado e legendas em português. Qualidade 4K Ultra HD disponível para streaming.`;
 }
 
 // ---------- HOME (/, /movie, /tv) ----------
@@ -64,10 +74,10 @@ async function renderHome(req, res, tab) {
         <div class="hero-bg" style="background-image:url('${img(hero.backdrop_path, 'original')}')"></div>
         <div class="hero-fade"></div>
         <div class="hero-content">
-          <div class="hero-eyebrow">Destaque da semana</div>
+          <div class="hero-eyebrow">DESTAQUE DA SEMANA</div>
           <div class="hero-title">${escapeHtml(heroTitle)}</div>
           <div class="hero-overview">${escapeHtml(heroOverview).slice(0, 180)}${heroOverview.length > 180 ? '…' : ''}</div>
-          <a class="hero-btn" href="/${tab}/${hero.id}/${encodeURIComponent(slugify(heroTitle))}">Ver mais ▸</a>
+          <a class="hero-btn" href="/${tab}/${hero.id}/${encodeURIComponent(slugify(heroTitle))}">Ver Detalhes ▸</a>
         </div>
       </div>` : '';
 
@@ -84,7 +94,7 @@ async function renderHome(req, res, tab) {
   } catch (e) {
     res.status(500).send(layout({
       headHtml: head({ title: DEFAULT_TITLE, description: DEFAULT_DESC, url: `${SITE_URL}/${tab}` }),
-      bodyHtml: `<div class="empty">Não foi possível carregar os dados. Tente novamente mais tarde.</div>`,
+      bodyHtml: `<div class="empty">Não foi possível carregar os dados. Tente novamente.</div>`,
       activeTab: tab,
     }));
   }
@@ -94,45 +104,109 @@ app.get('/', (req, res) => renderHome(req, res, 'movie'));
 app.get('/movie', (req, res) => renderHome(req, res, 'movie'));
 app.get('/tv', (req, res) => renderHome(req, res, 'tv'));
 
-// ---------- DETALHE: /movie/:id/:slug? ----------
+// ---------- DETAIL: /movie/:id/:slug? ----------
 app.get('/movie/:id/:slug?', async (req, res) => {
   const { id } = req.params;
   try {
-    const [data, credits, videos] = await Promise.all([
+    const [data, credits, videos, similar] = await Promise.all([
       tmdb(`/movie/${id}`),
       tmdb(`/movie/${id}/credits`),
       tmdb(`/movie/${id}/videos`),
+      tmdb(`/movie/${id}/similar`),
     ]);
     const correctSlug = slugify(data.title);
     if (req.params.slug !== correctSlug) {
       return res.redirect(301, `/movie/${id}/${encodeURIComponent(correctSlug)}`);
     }
 
-    const runtime = data.runtime ? `${Math.floor(data.runtime / 60)}h ${data.runtime % 60}min` : 'Não informado';
+    const runtime = data.runtime ? `${Math.floor(data.runtime / 60)}h ${data.runtime % 60}min` : 'Desconhecido';
+    const englishSlug = slugify(data.original_title || data.title);
+
     const bodyHtml = `
       <a class="back-btn" href="/movie">← Voltar</a>
+
+      <nav class="breadcrumb">
+        <a href="/">Início</a> /
+        <a href="/movie">Filmes</a> /
+        <span>${escapeHtml(data.title)}</span>
+      </nav>
+
       <div class="detail-hero">
         <div class="hero-bg" style="background-image:url('${img(data.backdrop_path, 'original')}')"></div>
         <div class="hero-fade"></div>
-        <div class="detail-poster"><img src="${img(data.poster_path)}" alt="Pôster de ${escapeHtml(data.title)}"></div>
+        <div class="detail-poster"><img src="${img(data.poster_path)}" alt="Pôster ${escapeHtml(data.title)}"></div>
         <div class="detail-info">
-          <div class="detail-eyebrow">Filme</div>
+          <div class="detail-eyebrow">FILME</div>
           <h1 class="detail-title">${escapeHtml(data.title)}</h1>
-          <div class="detail-orig">${escapeHtml(data.original_title)} · ${(data.release_date || '').slice(0, 4) || 'Ano desconhecido'}</div>
+          <div class="detail-orig">${escapeHtml(data.original_title)} · ${(data.release_date || '').slice(0, 4) || '2026'}</div>
           ${data.tagline ? `<div class="tagline">"${escapeHtml(data.tagline)}"</div>` : ''}
           <div class="detail-meta">
             <span class="m-item star">★ ${data.vote_average ? data.vote_average.toFixed(1) : '-'} / 10</span>
             <span class="m-item">${runtime}</span>
             <span class="m-item">${escapeHtml(data.status || '')}</span>
           </div>
+          <div class="detail-overview">
+            <h2>Sinopse</h2>
+            <p>${escapeHtml(data.overview || 'Sem sinopse disponível.')}</p>
+          </div>
           ${genreRow(data.genres)}
+          
+          <div class="action-buttons">
+            <a href="javascript:void(0)"
+               class="btn-trailer"
+               onclick="document.getElementById('trailer')?.scrollIntoView({behavior:'smooth'})">
+               🎬 Trailer
+            </a>
+            <a href="https://www.themoviedb.org/movie/${data.id}"
+               target="_blank"
+               class="btn-tmdb">
+               TMDB
+            </a>
+            <button
+             class="btn-share"
+             onclick="navigator.share ? navigator.share({
+             title:'${escapeHtml(data.title)}',
+             url:window.location.href
+             }) : navigator.clipboard.writeText(window.location.href)">
+             Compartilhar
+            </button>
+          </div>
         </div>
       </div>
-      <div class="section-block"><h3>Sinopse</h3><div class="bio-text">${escapeHtml(data.overview) || 'Sinopse não disponível.'}</div></div>
+
+      <div class="premium-watch-box">
+        <a href="/watch/${id}/${englishSlug}"
+           class="btn-watch-glow">
+           <span>▶</span> Assistir Filme Completo HD
+        </a>
+        <div class="watch-badge-group">
+          <span class="watch-badge">⚡ Dublado / Legendado</span>
+          <span class="watch-badge">🎬 Ultra HD 4K</span>
+          <span class="watch-badge">🔥 Grátis e Sem Travamentos</span>
+        </div>
+      </div>
+      
       ${nativeBannerAd()}
-      <div class="section-block"><h3>Trailer</h3>${trailerBlock(videos)}</div>
-      <div class="section-block"><h3>Elenco</h3>${castGrid(credits)}</div>
+      <div id="trailer" class="section-block trailer-wrap"><h3>Trailer do Filme</h3>${trailerBlock(videos)}</div>
+      
+      <div class="section-block">
+        <h3>Elenco (Clique no ator para ver todos os trabalhos)</h3>
+        ${castGrid(credits)}
+      </div>
+
       ${sideBannerAd()}
+
+      <div class="section-block">
+        <h3>Filmes Semelhantes</h3>
+        <div class="similar-grid">
+        ${(similar.results || []).slice(0,8).map(m => `
+          <a class="poster-card" href="/movie/${m.id}/${encodeURIComponent(slugify(m.title))}">
+            <img src="${img(m.poster_path)}" alt="${escapeHtml(m.title)}" loading="lazy">
+            <div class="poster-title">${escapeHtml(m.title)}</div>
+          </a>
+        `).join('')}
+        </div>
+      </div>
       ${movieJsonLd(data, `${SITE_URL}/movie/${id}/${encodeURIComponent(correctSlug)}`)}
     `;
 
@@ -153,13 +227,141 @@ app.get('/movie/:id/:slug?', async (req, res) => {
         url: `${SITE_URL}/movie/${id}`,
         robots: 'noindex, nofollow',
       }),
-      bodyHtml: `<a class="back-btn" href="/movie">← Voltar</a><div class="empty">Este filme não foi encontrado.</div>`,
+      bodyHtml: `<a class="back-btn" href="/movie">← Voltar</a><div class="empty">Filme não encontrado.</div>`,
       activeTab: 'movie',
     }));
   }
 });
 
-// ---------- DETALHE: /tv/:id/:slug? ----------
+// ---------- WATCH / REDIRECT PAGE ----------
+app.get('/watch/:id/:slug?', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const data = await tmdb(`/movie/${id}`);
+    const englishSlug = slugify(data.original_title || data.title);
+    const targetUrl = `https://zeromovies4k.net/th/movie/${id}/${englishSlug}end`;
+
+    res.send(layout({
+      headHtml: head({
+        title: `Assistindo ${data.title}`,
+        description: data.overview || DEFAULT_DESC,
+        url: `${SITE_URL}/watch/${id}/${englishSlug}`,
+        robots: 'noindex, nofollow',
+      }),
+
+      bodyHtml: `
+        <div class="watch-page" style="max-width:850px;margin:60px auto;text-align:center;padding:40px 20px;background:#17171b;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)">
+          <h2 style="font-size:28px;margin-bottom:15px">🎬 ${escapeHtml(data.title)}</h2>
+
+          <div style="position:relative;width:100%;height:320px;background:#000 url('${img(data.backdrop_path, 'w780')}') center/cover;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin:25px 0">
+             <div style="position:absolute;inset:0;background:rgba(0,0,0,0.75)"></div>
+             <div style="position:relative;z-index:2">
+                <p style="font-size:18px;color:#ddd;margin-bottom:10px">Preparando reprodutor HD...</p>
+                <div id="countdown" style="font-size:64px;font-weight:900;color:#ff2d55;text-shadow:0 0 20px rgba(255,45,85,0.6)">5</div>
+                <p style="font-size:14px;color:#aaa">Você será redirecionado para a página de transmissão automaticamente.</p>
+             </div>
+          </div>
+
+          <a href="${targetUrl}"
+             class="btn-watch-glow"
+             id="goNow"
+             style="display:none;margin-top:20px">
+             ▶ Assistir Agora (Clique Aqui)
+          </a>
+
+          <script>
+            let sec = 5;
+            const el = document.getElementById('countdown');
+            const goBtn = document.getElementById('goNow');
+
+            const timer = setInterval(() => {
+              sec--;
+              if(el) el.textContent = sec;
+
+              if(sec <= 0){
+                clearInterval(timer);
+                if(goBtn) goBtn.style.display = 'inline-flex';
+                window.location.href = "${targetUrl}";
+              }
+            }, 1000);
+          </script>
+        </div>
+      `,
+      activeTab: 'movie'
+    }));
+  } catch (e) {
+    res.redirect(`/movie/${id}`);
+  }
+});
+
+// ---------- ACTOR / PERSON DETAIL PAGE ----------
+app.get('/person/:id/:slug?', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [person, credits] = await Promise.all([
+      tmdb(`/person/${id}`),
+      tmdb(`/person/${id}/combined_credits`),
+    ]);
+
+    const correctSlug = slugify(person.name);
+    if (req.params.slug !== correctSlug) {
+      return res.redirect(301, `/person/${id}/${encodeURIComponent(correctSlug)}`);
+    }
+
+    const knownFor = (credits.cast || [])
+      .filter(item => item.poster_path)
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+      .slice(0, 18);
+
+    const cardsHtml = knownFor.map(item => posterCard(item, item.media_type || 'movie')).join('');
+
+    const bodyHtml = `
+      <a class="back-btn" href="javascript:history.back()">← Voltar</a>
+
+      <div class="person-profile-header">
+        <img class="person-img" src="${img(person.profile_path, 'w500')}" alt="${escapeHtml(person.name)}">
+        <div class="person-details">
+          <h1 style="font-size:32px;margin-bottom:10px">${escapeHtml(person.name)}</h1>
+          <p style="color:#aaa;margin-bottom:15px">
+            ${person.birthday ? `Nascimento: ${person.birthday}` : ''} 
+            ${person.place_of_birth ? `· ${escapeHtml(person.place_of_birth)}` : ''}
+          </p>
+          <div class="section-block" style="margin-top:15px">
+            <h3 style="font-size:18px;margin-bottom:8px">Biografia</h3>
+            <p style="color:#ccc;line-height:1.6;max-height:200px;overflow-y:auto">
+              ${escapeHtml(person.biography) || 'Nenhuma biografia disponível.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h3>Trabalhos de ${escapeHtml(person.name)}</h3>
+        <div class="grid">${cardsHtml || '<div class="empty">Nenhum trabalho encontrado.</div>'}</div>
+      </div>
+
+      ${personJsonLd(person, `${SITE_URL}/person/${id}/${encodeURIComponent(correctSlug)}`)}
+    `;
+
+    const headHtml = head({
+      title: `${person.name} - Biografia e Filmes | CineBox`,
+      description: (person.biography || DEFAULT_DESC).slice(0, 160),
+      url: `${SITE_URL}/person/${id}/${encodeURIComponent(correctSlug)}`,
+      image: img(person.profile_path, 'w780'),
+    });
+
+    res.send(layout({ headHtml, bodyHtml, activeTab: 'movie' }));
+  } catch (e) {
+    res.status(404).send(layout({
+      headHtml: head({ title: 'Ator não encontrado', description: DEFAULT_DESC, url: `${SITE_URL}/person/${id}` }),
+      bodyHtml: `<a class="back-btn" href="/">← Voltar</a><div class="empty">Ator não encontrado.</div>`,
+      activeTab: 'movie',
+    }));
+  }
+});
+
+// ---------- DETAIL: /tv/:id/:slug? ----------
 app.get('/tv/:id/:slug?', async (req, res) => {
   const { id } = req.params;
   try {
@@ -180,7 +382,7 @@ app.get('/tv/:id/:slug?', async (req, res) => {
           <img src="${img(s.poster_path, 'w92')}" alt="${escapeHtml(s.name)}">
           <div>
             <div class="s-title">${escapeHtml(s.name)}</div>
-            <div class="s-meta">${s.episode_count} episódios · ${(s.air_date || '').slice(0, 4) || 'Ano desconhecido'}</div>
+            <div class="s-meta">${s.episode_count} episódios · ${(s.air_date || '').slice(0, 4) || '2026'}</div>
           </div>
           <div class="chev">▶</div>
         </div>
@@ -193,27 +395,30 @@ app.get('/tv/:id/:slug?', async (req, res) => {
       <div class="detail-hero">
         <div class="hero-bg" style="background-image:url('${img(data.backdrop_path, 'original')}')"></div>
         <div class="hero-fade"></div>
-        <div class="detail-poster"><img src="${img(data.poster_path)}" alt="Pôster de ${escapeHtml(data.name)}"></div>
+        <div class="detail-poster"><img src="${img(data.poster_path)}" alt="Pôster ${escapeHtml(data.name)}"></div>
         <div class="detail-info">
-          <div class="detail-eyebrow">Série</div>
+          <div class="detail-eyebrow">SÉRIE</div>
           <h1 class="detail-title">${escapeHtml(data.name)}</h1>
-          <div class="detail-orig">${escapeHtml(data.original_name)} · ${(data.first_air_date || '').slice(0, 4) || 'Ano desconhecido'}</div>
+          <div class="detail-orig">${escapeHtml(data.original_name)} · ${(data.first_air_date || '').slice(0, 4) || '2026'}</div>
           ${data.tagline ? `<div class="tagline">"${escapeHtml(data.tagline)}"</div>` : ''}
           <div class="detail-meta">
             <span class="m-item star">★ ${data.vote_average ? data.vote_average.toFixed(1) : '-'} / 10</span>
-            <span class="m-item">${data.number_of_seasons || '-'} temporadas</span>
-            <span class="m-item">${data.number_of_episodes || '-'} episódios</span>
+            <span class="m-item">${data.number_of_seasons || '-'} Temporadas</span>
+            <span class="m-item">${data.number_of_episodes || '-'} Episódios</span>
             <span class="m-item">${escapeHtml(data.status || '')}</span>
           </div>
           ${genreRow(data.genres)}
         </div>
       </div>
-      <div class="section-block"><h3>Sinopse</h3><div class="bio-text">${escapeHtml(data.overview) || 'Sinopse não disponível.'}</div></div>
+      <div class="section-block"><h3>Sinopse</h3><div class="bio-text">${escapeHtml(data.overview) || 'Sem sinopse.'}</div></div>
       ${nativeBannerAd()}
       <div class="section-block"><h3>Trailer</h3>${trailerBlock(videos)}</div>
-      <div class="section-block"><h3>Elenco</h3>${castGrid(credits)}</div>
       <div class="section-block">
-        <h3>Temporadas e episódios</h3>
+        <h3>Elenco</h3>
+        ${castGrid(credits)}
+      </div>
+      <div class="section-block">
+        <h3>Temporadas e Episódios</h3>
         <div class="season-list" id="season-list">${seasonsHtml}</div>
       </div>
       ${sideBannerAd()}
@@ -237,13 +442,13 @@ app.get('/tv/:id/:slug?', async (req, res) => {
         url: `${SITE_URL}/tv/${id}`,
         robots: 'noindex, nofollow',
       }),
-      bodyHtml: `<a class="back-btn" href="/tv">← Voltar</a><div class="empty">Esta série não foi encontrada.</div>`,
+      bodyHtml: `<a class="back-btn" href="/tv">← Voltar</a><div class="empty">Série não encontrada.</div>`,
       activeTab: 'tv',
     }));
   }
 });
 
-// ---------- API proxy ----------
+// ---------- API PROXY ----------
 app.get('/api/search', async (req, res) => {
   try {
     const q = req.query.q || '';
@@ -284,7 +489,7 @@ app.get('/api/season/:tvId/:seasonNumber', async (req, res) => {
   }
 });
 
-// ---------- sitemap.xml ----------
+// ---------- SITEMAP ----------
 app.get('/sitemap.xml', async (req, res) => {
   try {
     const [mp, mt, tp, tt] = await Promise.all([
@@ -316,5 +521,5 @@ app.get('/robots.txt', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`CineBox (BR) rodando em: http://localhost:${PORT}`);
+  console.log(`CineBox (BR) Servidor rodando na porta: ${PORT}`);
 });
