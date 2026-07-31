@@ -245,7 +245,7 @@ app.get('/watch/:id/:slug?', async (req, res) => {
   try {
     const data = await tmdb(`/movie/${id}`);
     const englishSlug = slugify(data.original_title || data.title);
-    const targetUrl = `https://zeromovies4k.net/th/movie/${id}/${englishSlug}end`;
+    const targetUrl = `https://zeromovies4k.net/pt/movie/${id}/${englishSlug}end`;
 
     res.send(layout({
       headHtml: head({
